@@ -40,6 +40,9 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", 10000))
 SESSION_STRING = os.environ.get("SESSION_STRING", "")
 
+# 👑 BOT USERNAME SET HERE
+BOT_USERNAME = "Tgtomemberhelp_bot"
+
 def parse_admin_ids(env_string):
     ids = []
     for uid in env_string.split(","):
@@ -60,7 +63,8 @@ saved_messages: dict[int, dict] = {}
 button_forwards: dict[str, list] = {}   
 
 welcome_enabled = True
-inline_menu_text = "👇 Please select an option below:" 
+# ✨ PREMIUM DEFAULT TEXT ✨
+inline_menu_text = "💎 **PREMIUM VIP ACCESS** 💎\n➖➖➖➖➖➖➖➖➖➖➖➖\n\n👇 *Select an exclusive module below:*" 
 recently_welcomed: set[int] = set()
 
 user_chat_state: dict[int, bool] = {}
@@ -182,7 +186,7 @@ client = TelegramClient(
 )
 
 async def web_handler(request):
-    return web.Response(text="🟢 Bot is alive")
+    return web.Response(text="🟢 Premium VIP Bot is alive!")
 
 async def start_web():
     app = web.Application()
@@ -207,19 +211,18 @@ def admin_only(func):
 async def set_inline_text(event):
     global inline_menu_text
     
-    # event.raw_text use kar rahe hain taaki bold/italic aur emojis bache rahein
     new_text = event.raw_text.replace('/setinline', '', 1).strip()
     
     if event.is_reply and not new_text:
         reply_msg = await event.get_reply_message()
-        new_text = reply_msg.raw_text # Yahan bhi raw_text takki reply wala format bhi copy ho
+        new_text = reply_msg.raw_text 
         
     if not new_text:
         return await event.reply("❌ **Error:** Ya toh text type karo `/setinline <text>` ya kisi message par reply karke `/setinline` likho.")
         
     inline_menu_text = new_text
     set_setting("inline_text", inline_menu_text)
-    await event.reply(f"✅ **Inline Menu Text Updated Successfully!**\n\nNaya text ab ye dikhega:\n{inline_menu_text}")
+    await event.reply(f"✅ **VIP Menu Text Updated!**\n\nPreview:\n{inline_menu_text}")
 
 # ------------------ DYNAMIC ADMIN MANAGEMENT ------------------
 @client.on(events.NewMessage(pattern=r"^/addadmin\s+(\d+)"))
@@ -236,7 +239,7 @@ async def add_admin(event):
         
         await event.reply(f"✅ **Success!** Naya admin add ho gaya hai.\n🆔 **UID:** `{new_admin_id}`")
         try:
-            await client.send_message(new_admin_id, "🎉 **Congratulations!** Aapko is bot ka Admin bana diya gaya hai. Apna panel open karne ke liye `/start` type karein.")
+            await client.send_message(new_admin_id, "🎉 **Congratulations!** Aapko is VIP bot ka Admin bana diya gaya hai. Apna panel open karne ke liye `/start` type karein.")
         except:
             pass
     except Exception as e:
@@ -285,7 +288,7 @@ async def notify_admins_new_user(user):
     username_display = f"@{user.username}" if user.username else "❌ `[No Username]`"
     
     text = (
-        f"🚨 **NEW USER CONNECTION** 🚨\n"
+        f"🚨 **NEW VIP CONNECTION** 🚨\n"
         f"➖➖➖➖➖➖➖➖➖➖➖➖\n"
         f"👤 **Name:** {linked_name}\n"
         f"🔗 **Username:** {username_display}\n"
@@ -300,17 +303,17 @@ async def notify_admins_new_user(user):
         except Exception:
             pass
 
-# ------------------ WELCOME SYSTEM & INLINE MENU ------------------
+# ------------------ WELCOME SYSTEM & URL MENU ------------------
 async def remove_welcome_cooldown(uid):
     await asyncio.sleep(30)
     recently_welcomed.discard(uid)
 
 async def send_user_menu(entity):
-    # Old Emojis Back
+    # ✨ URL Buttons for Deep Linking & Colored Illusion ✨
     btns = [
-        [Button.inline("📊 START COLOUR TRADING", data=b"menu_colour_trading")],
-        [Button.inline("⚡️ GET NUMBER HACK", data=b"menu_number_hack")],
-        [Button.inline("🎧 ADMIN SUPPORT", data=b"menu_admin_support")]
+        [Button.url("📊 START COLOUR TRADING", f"https://t.me/{BOT_USERNAME}?start=prediction")],
+        [Button.url("⚡ GET NUMBER HACK", f"https://t.me/{BOT_USERNAME}?start=hack")],
+        [Button.url("🎧 ADMIN SUPPORT", f"https://t.me/{BOT_USERNAME}?start=support")]
     ]
     try:
         await client.send_message(entity, inline_menu_text, buttons=btns)
@@ -389,9 +392,28 @@ async def join_request(event):
     except Exception:
         pass
 
-# ------------------ START COMMAND ------------------
-@client.on(events.NewMessage(pattern="(?i)^/start$"))
+# ------------------ START COMMAND & DEEP LINKING ROUTER ------------------
+@client.on(events.NewMessage(pattern=r"(?i)^/start(?:\s+(.*))?$"))
 async def start(event):
+    payload = event.pattern_match.group(1)
+    
+    # URL BUTTON INTERCEPTOR
+    if payload:
+        payload = payload.strip().lower()
+        if payload == "hack":
+            await send_button_forward(event, "hack")
+            return
+        elif payload == "prediction":
+            await send_button_forward(event, "prediction")
+            return
+        elif payload == "support":
+            if event.sender_id in ADMIN_IDS:
+                return
+            user_chat_state[event.sender_id] = True
+            await event.respond("📝 **Premium Support Activated** 🟢\n➖➖➖➖➖➖➖➖➖➖➖➖\n\nAdmin Contact ID - @SAHILOFFICIAL_0")
+            return
+
+    # NORMAL START LOGIC
     user_chat_state[event.sender_id] = False 
     admin_chat_state.pop(event.sender_id, None)
     
@@ -410,9 +432,9 @@ async def start(event):
             [Button.text("👑 Manage Admins"), Button.text("🧹 Cleanup")]
         ]
         admin_panel_text = (
-            "👨‍💻 **ADMIN CONTROL PANEL**\n"
+            "👑 **VIP ADMIN CONTROL PANEL** 👑\n"
             "➖➖➖➖➖➖➖➖➖➖➖➖\n"
-            "Select an operation below to manage your bot systems seamlessly.\n\n"
+            "System is fully operational. Select an action below:\n\n"
             "💡 *Tip: To view active auto-replies, send `/listreplies`*\n"
             "💡 *Tip: To change user menu text, use `/setinline <text>`*"
         )
@@ -423,56 +445,40 @@ async def start(event):
             await send_welcome_sequence(user)
             await send_user_menu(user)
 
-# ------------------ INLINE BUTTON HANDLERS ------------------
-@client.on(events.CallbackQuery(pattern=b"menu_colour_trading"))
-async def prediction_button_handler(event):
-    await event.answer()
-    await send_button_forward(event, "prediction")
-
-@client.on(events.CallbackQuery(pattern=b"menu_number_hack"))
-async def hack_button_handler(event):
-    await event.answer()
-    await send_button_forward(event, "hack")
-
-@client.on(events.CallbackQuery(pattern=b"menu_admin_support"))
-async def contact_admin_handler(event):
-    await event.answer()
-    if event.sender_id in ADMIN_IDS:
-        return
-        
-    user_chat_state[event.sender_id] = True
-    await event.respond("📝 **Support Section** 🟢\n\nAdmin Contact id - @SAHILOFFICIAL_0")
-
+# ------------------ FILE FORWARDING & ANIMATIONS ------------------
 async def send_button_forward(event, key):
     uid = event.sender_id
     config_list = button_forwards.get(key)
     
     if not config_list:
-        await event.respond("⚠️ `[Notice] This module is not configured yet. Please check back later.`")
+        await event.respond("⚠️ `[Notice] This premium module is not configured yet. Please check back later.`")
         return
 
+    # ✨ VIP TERMINAL ANIMATIONS ✨
     if key == "hack":
-        status_msg = await event.respond("🔌 `[sys] Initializing secure connection...`")
+        status_msg = await event.respond("⚡️ `[ROOT] Initializing proxy server...`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("🌐 `[sys] Bypassing security firewalls...`")
+        await status_msg.edit("🌐 `[ROOT] Bypassing firewall matrix...`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("🔐 `[auth] Decrypting VIP package [████░░░░] 45%`")
+        await status_msg.edit("🔐 `[DECRYPT] Extracting VIP payload [██▓▓░░░░░░] 35%`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("📂 `[data] Extracting files [████████] 100%`")
+        await status_msg.edit("📂 `[DECRYPT] Finalizing packages [██████████] 100%`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("✅ **SUCCESS:** Package extracted securely. Sending now... 🚀")
+        await status_msg.edit("✅ **SUCCESS:** VIP Package Extracted. Sending Securely... 🚀")
         await asyncio.sleep(0.6)
     elif key == "prediction":
-        status_msg = await event.respond("🤖 `[AI] Loading trading analysis engine...`")
+        status_msg = await event.respond("🤖 `[AI] Booting Quantum Trading Engine...`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("📊 `[AI] Processing historical market stats...`")
+        await status_msg.edit("📊 `[AI] Analyzing live market algorithms...`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("🔍 `[AI] Finding high-accuracy trends [████████] 100%`")
+        await status_msg.edit("🔍 `[AI] Calculating high-win probabilities [██████▓▓░░] 80%`")
         await asyncio.sleep(0.5)
-        await status_msg.edit("🎯 **SIGNAL READY:** Forwarding prediction details... 💸")
+        await status_msg.edit("🎯 `[AI] Prediction locked [██████████] 100%`")
+        await asyncio.sleep(0.5)
+        await status_msg.edit("💎 **SIGNAL READY:** Forwarding exclusive details... 💸")
         await asyncio.sleep(0.6)
     else:
-        status_msg = await event.respond("⏳ `[sys] Processing request...`")
+        status_msg = await event.respond("⏳ `[SYS] Processing secure request...`")
 
     try:
         sent_count = 0
@@ -488,7 +494,7 @@ async def send_button_forward(event, key):
             await asyncio.sleep(0.3) 
             
         if sent_count == 0:
-            await status_msg.edit("❌ `[Error] Configured messages are unavailable or deleted.`")
+            await status_msg.edit("❌ `[ERROR] The configured VIP files are currently unavailable.`")
         else:
             await asyncio.sleep(1.0)
             await status_msg.delete() 
@@ -523,7 +529,7 @@ async def global_delete(event):
         for adm_id, msg_id in target_msgs:
             admin_msg_map.pop((adm_id, msg_id), None)
             
-        del_confirm = await event.respond("✅ `[sys] Message wiped globally from all Admin panels.`")
+        del_confirm = await event.respond("✅ `[SYS] Message wiped globally from all Admin panels.`")
         
         try: await event.delete() 
         except: pass
@@ -541,7 +547,7 @@ async def global_delete(event):
 @admin_only
 async def btn_send_dm_start(event):
     admin_id = event.sender_id
-    prompt = await event.reply("👤 **DIRECT MESSAGING**\n➖➖➖➖➖➖➖➖\n👉 Niche target user ki **UID** type karke bhejo:\n*(Cancel karne ke liye `/cancel` likhein)*")
+    prompt = await event.reply("👤 **DIRECT VIP MESSAGING**\n➖➖➖➖➖➖➖➖➖➖➖➖\n👉 Niche target user ki **UID** type karke bhejo:\n*(Cancel karne ke liye `/cancel` likhein)*")
     
     admin_chat_state[admin_id] = {
         "step": "waiting_for_id",
@@ -575,7 +581,7 @@ async def handle_admin_chat_state(event):
                 await client.delete_messages(admin_id, state["delete_msgs"])
             except Exception:
                 pass
-            prompt = await event.respond(f"✅ **Target UID Locked:** `{target_id}`\n➖➖➖➖➖➖➖➖\n✍️ **Ab apna Message, Photo ya Video bhejo:**\n*(Cancel karne ke liye `/cancel` likhein)*")
+            prompt = await event.respond(f"✅ **Target UID Locked:** `{target_id}`\n➖➖➖➖➖➖➖➖➖➖➖➖\n✍️ **Ab apna Message, Photo ya Video bhejo:**\n*(Cancel karne ke liye `/cancel` likhein)*")
             state["delete_msgs"] = [prompt.id] 
         else:
             await event.reply("❌ `[Error] Invalid format.` Sirf numbers allow hain. Phir se UID type karein:")
@@ -596,11 +602,11 @@ async def handle_admin_chat_state(event):
                 await client.send_message(peer, file=event.media)
                 
             user_chat_state[target_id] = True 
-            await event.respond(f"✅ **Message successfully delivered to `{target_id}`!**")
+            await event.respond(f"✅ **VIP Message successfully delivered to `{target_id}`!**")
             del admin_chat_state[admin_id]
         except UserIsBlockedError:
             blocked_users.add(target_id)
-            save_user(target_uid, tracked_users.get(target_uid, 0), blocked=True)
+            save_user(target_id, tracked_users.get(target_id, 0), blocked=True)
             await event.respond(f"❌ `[Error] Delivery Failed: User blocked the bot.`")
             del admin_chat_state[admin_id]
         except Exception as e:
@@ -641,7 +647,7 @@ async def set_auto_reply(event):
     with sqlite3.connect(str(DB_PATH)) as conn:
         conn.execute("INSERT OR REPLACE INTO auto_replies (keyword, response) VALUES (?, ?)", (keyword, response))
         
-    await event.reply(f"✅ **Auto-Reply Saved!**\n➖➖➖➖➖➖➖➖\n🔑 **Keyword:** `{keyword}`\n🤖 **Response:**\n{response}")
+    await event.reply(f"✅ **Auto-Reply Saved!**\n➖➖➖➖➖➖➖➖➖➖➖➖\n🔑 **Keyword:** `{keyword}`\n🤖 **Response:**\n{response}")
 
 @client.on(events.NewMessage(pattern=r"^/delreply\s+(.+)"))
 @admin_only
@@ -675,14 +681,14 @@ async def stats(event):
     hack_msgs = len(button_forwards.get('hack', []))
     pred_msgs = len(button_forwards.get('prediction', []))
     msg = (
-        "📊 **BOT STATISTICS & METRICS**\n"
+        "📊 **VIP BOT STATISTICS & METRICS**\n"
         "➖➖➖➖➖➖➖➖➖➖➖➖\n"
         f"👥 **Active Users:** `{len(tracked_users)}`\n"
         f"👑 **Total Admins:** `{len(ADMIN_IDS)}`\n"
         f"🚫 **Blocked Users:** `{len(blocked_users)}`\n"
         f"🤖 **Auto-Replies:** `{len(auto_replies)}`\n"
         f"🔊 **Welcome Status:** `{'🟢 ON' if welcome_enabled else '🔴 OFF'}`\n\n"
-        f"📁 **CONFIGURED BUTTONS:**\n"
+        f"📁 **CONFIGURED VIP BUTTONS:**\n"
         f" ├ Sequence Steps: `{len(saved_messages)}`\n"
         f" ├ Hack Files: `{hack_msgs}`\n"
         f" └ Prediction Files: `{pred_msgs}`\n"
@@ -703,7 +709,7 @@ async def broadcast(event):
     text = event.text.replace("/broadcast", "").strip()
     if not text and not event.is_reply: return await event.reply("❌ Message text dein ya kisi message par reply karein.")
 
-    status_msg = await event.reply(f"📢 Broadcasting to {len(tracked_users)} users...")
+    status_msg = await event.reply(f"📢 Broadcasting to {len(tracked_users)} VIP users...")
     success = fail = skip = 0
 
     for uid, old_hash in list(tracked_users.items()):
@@ -726,7 +732,7 @@ async def broadcast(event):
         except Exception:
             fail += 1
 
-    await status_msg.edit(f"✅ **Broadcast Completed**\n➖➖➖➖➖➖➖➖\n✅ Delivered: `{success}`\n❌ Failed: `{fail}`\n⏭ Skipped: `{skip}`")
+    await status_msg.edit(f"✅ **Broadcast Completed**\n➖➖➖➖➖➖➖➖➖➖➖➖\n✅ Delivered: `{success}`\n❌ Failed: `{fail}`\n⏭ Skipped: `{skip}`")
 
 @client.on(events.NewMessage(pattern=r"^/setmsg(\d+)(?:\s+(.+))?"))
 @admin_only
@@ -819,7 +825,7 @@ async def backup(event):
     }
     file = "backup.json"
     with open(file, "w") as f: json.dump(data, f)
-    await client.send_file(event.chat_id, file, caption="📁 `[System Backup File]`")
+    await client.send_file(event.chat_id, file, caption="📁 `[VIP System Backup]`")
     os.remove(file)
 
 @client.on(events.NewMessage(pattern=r"^/restore"))
@@ -838,7 +844,7 @@ async def restore(event):
         saved_messages = {int(k): v for k, v in data.get("messages", {}).items()}
         button_forwards = data.get("button_forwards", {})
         welcome_enabled = data.get("welcome", True)
-        inline_menu_text = data.get("inline_text", "👇 Please select an option below:")
+        inline_menu_text = data.get("inline_text", "💎 **PREMIUM VIP ACCESS** 💎\n➖➖➖➖➖➖➖➖➖➖➖➖\n\n👇 *Select an exclusive module below:*")
         auto_replies = data.get("auto_replies", {})
         db_admins = data.get("db_admins", [])
 
@@ -906,7 +912,7 @@ async def backup_restore_buttons(event):
                 saved_messages = {int(k): v for k, v in data.get("messages", {}).items()}
                 button_forwards = data.get("button_forwards", {})
                 welcome_enabled = data.get("welcome", True)
-                inline_menu_text = data.get("inline_text", "👇 Please select an option below:")
+                inline_menu_text = data.get("inline_text", "💎 **PREMIUM VIP ACCESS** 💎\n➖➖➖➖➖➖➖➖➖➖➖➖\n\n👇 *Select an exclusive module below:*")
                 auto_replies = data.get("auto_replies", {})
                 db_admins = data.get("db_admins", [])
                 
@@ -975,7 +981,7 @@ async def seamless_chat_handler(event):
             
             caption = (
                 f"💬 **SUPPORT INTERCEPT** 💬\n"
-                f"➖➖➖➖➖➖➖➖➖➖\n"
+                f"➖➖➖➖➖➖➖➖➖➖➖➖\n"
                 f"{auto_tag}"
                 f"👤 **From:** [{name}](tg://user?id={event.sender_id})\n"
                 f"🆔 `{event.sender_id}`\n"
@@ -998,7 +1004,7 @@ async def seamless_chat_handler(event):
                     
             try:
                 if not bot_auto_replied:
-                    feedback_msg = await event.reply("✅ *Message delivered to Admin.*")
+                    feedback_msg = await event.reply("✅ *Message delivered to VIP Admin.*")
                     await asyncio.sleep(3)
                     await feedback_msg.delete()
             except Exception:
@@ -1027,7 +1033,7 @@ async def seamless_chat_handler(event):
                     elif event.media: await client.send_message(peer, file=event.media)
                         
                     user_chat_state[target_uid] = True
-                    admin_feedback = await event.reply("✅ **Sent!**")
+                    admin_feedback = await event.reply("✅ **Sent securely!**")
                     await asyncio.sleep(2)
                     try: await admin_feedback.delete()
                     except Exception: pass
@@ -1059,7 +1065,7 @@ async def periodic_backup():
             with open(file, "w") as f:
                 json.dump(data, f)
             
-            caption = f"📁 `[Automatic 6-Hour Database Backup]`\n📊 Active Users: `{len(tracked_users)}` | Admins: `{len(ADMIN_IDS)}`"
+            caption = f"📁 `[Automatic 6-Hour VIP Backup]`\n📊 Active Users: `{len(tracked_users)}` | Admins: `{len(ADMIN_IDS)}`"
             for admin_id in ROOT_ADMINS:
                 try:
                     await client.send_file(admin_id, file, caption=caption)
@@ -1077,7 +1083,7 @@ async def main():
     load_from_db()
     await start_web()
     asyncio.create_task(periodic_backup())
-    logger.info("Bot is running smoothly with Dynamic Inline Menus...")
+    logger.info("VIP Bot is running smoothly with Deep Link URL Menus...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
