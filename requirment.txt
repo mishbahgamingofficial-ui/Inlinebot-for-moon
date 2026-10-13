@@ -1,1 +1,4 @@
+Telethon
+aiohttp
+python-dotenv
 
