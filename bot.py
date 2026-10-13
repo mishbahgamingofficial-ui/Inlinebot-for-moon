@@ -311,7 +311,7 @@ async def remove_welcome_cooldown(uid):
 async def send_user_menu(entity):
     # ✨ URL Buttons for Deep Linking & Colored Illusion ✨
     btns = [
-        [Button.url("📊 START COLOUR TRADING", f"https://t.me/{BOT_USERNAME}?start=prediction")],
+        [Button.url("📊 How To START Colour Trading", f"https://t.me/{BOT_USERNAME}?start=prediction")],
         [Button.url("⚡ GET NUMBER HACK", f"https://t.me/{BOT_USERNAME}?start=hack")],
         [Button.url("🎧 ADMIN SUPPORT", f"https://t.me/{BOT_USERNAME}?start=support")]
     ]
