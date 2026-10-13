@@ -60,14 +60,15 @@ tracked_users: dict[int, int] = {}
 blocked_users: set[int] = set()
 saved_messages: dict[int, dict] = {}    
 button_forwards: dict[str, list] = {}   
+
+# Menu State Variables
 welcome_enabled = True
+inline_menu_text = "👇 Please select an option below:" 
 recently_welcomed: set[int] = set()
 
 user_chat_state: dict[int, bool] = {}
 admin_chat_state: dict[int, dict] = {}
 auto_replies: dict[str, str] = {}
-
-# 🔥 NAYA: Global delete track karne ke liye registry
 admin_msg_map: dict[tuple, list] = {} 
 
 def init_db():
@@ -106,7 +107,7 @@ def init_db():
         return conn
 
 def load_from_db():
-    global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, auto_replies, ADMIN_IDS
+    global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, inline_menu_text, auto_replies, ADMIN_IDS
     with sqlite3.connect(str(DB_PATH)) as conn:
         cur = conn.cursor()
         
@@ -139,10 +140,12 @@ def load_from_db():
             button_forwards[key].append({"msg_id": mid, "from_chat": fchat})
             
         # Load settings
-        cur.execute("SELECT value FROM settings WHERE key='welcome_enabled'")
-        row = cur.fetchone()
-        if row:
-            welcome_enabled = row[0] == "1"
+        cur.execute("SELECT key, value FROM settings")
+        for k, v in cur.fetchall():
+            if k == 'welcome_enabled':
+                welcome_enabled = (v == "1")
+            elif k == 'inline_text':
+                inline_menu_text = v
             
         # Load auto replies
         cur.execute("SELECT keyword, response FROM auto_replies")
@@ -208,6 +211,24 @@ def admin_only(func):
             return
         await func(event)
     return wrapper
+
+# ------------------ DYNAMIC INLINE TEXT COMMAND ------------------
+@client.on(events.NewMessage(pattern=r"^/setinline(?:\s+(.+))?"))
+@admin_only
+async def set_inline_text(event):
+    global inline_menu_text
+    new_text = event.pattern_match.group(1)
+    
+    if event.is_reply and not new_text:
+        reply_msg = await event.get_reply_message()
+        new_text = reply_msg.text
+        
+    if not new_text:
+        return await event.reply("❌ **Error:** Ya toh text type karo `/setinline <text>` ya kisi message par reply karke `/setinline` likho.")
+        
+    inline_menu_text = new_text.strip()
+    set_setting("inline_text", inline_menu_text)
+    await event.reply(f"✅ **Inline Menu Text Updated Successfully!**\n\nNaya text ab ye dikhega:\n{inline_menu_text}")
 
 # ------------------ DYNAMIC ADMIN MANAGEMENT ------------------
 @client.on(events.NewMessage(pattern=r"^/addadmin\s+(\d+)"))
@@ -289,21 +310,19 @@ async def notify_admins_new_user(user):
         except Exception:
             pass
 
-# ------------------ WELCOME SYSTEM & INLINE MENU ------------------
+# ------------------ WELCOME SYSTEM & MENU ------------------
 async def remove_welcome_cooldown(uid):
     await asyncio.sleep(30)
     recently_welcomed.discard(uid)
 
 async def send_user_menu(entity):
-    # INLINE KEYBOARD SEQUENCE UPDATED[span_0](start_span)[span_0](end_span)
     btns = [
-        [Button.inline("📊 START COLOUR TRADING", data=b"menu_colour_trading")],
-        [Button.inline("⚡️ GET NUMBER HACK", data=b"menu_number_hack")],
-        [Button.inline("🎧 ADMIN SUPPORT", data=b"menu_admin_support")]
+        [Button.inline("🟢 START COLOUR TRADING", data=b"menu_colour_trading")],
+        [Button.inline("💎 GET NUMBER HACK", data=b"menu_number_hack")],
+        [Button.inline("🔴 ADMIN SUPPORT", data=b"menu_admin_support")]
     ]
     try:
-        safe_text = "👇 Please select an option below:"  
-        await client.send_message(entity, safe_text, buttons=btns)
+        await client.send_message(entity, inline_menu_text, buttons=btns)
     except Exception as e:
         logger.error(f"Menu error: {e}")
 
@@ -403,7 +422,8 @@ async def start(event):
             "👨‍💻 **ADMIN CONTROL PANEL**\n"
             "➖➖➖➖➖➖➖➖➖➖➖➖\n"
             "Select an operation below to manage your bot systems seamlessly.\n\n"
-            "💡 *Tip: To view active auto-replies, send `/listreplies`*"
+            "💡 *Tip: To view active auto-replies, send `/listreplies`*\n"
+            "💡 *Tip: To change user menu text, use `/setinline <text>`*"
         )
         await event.reply(admin_panel_text, buttons=btns)
     else:
@@ -412,10 +432,10 @@ async def start(event):
             await send_welcome_sequence(user)
             await send_user_menu(user)
 
-# ------------------ INLINE CALLBACK BUTTON HANDLERS ------------------
+# ------------------ INLINE BUTTON HANDLERS ------------------
 @client.on(events.CallbackQuery(pattern=b"menu_colour_trading"))
 async def prediction_button_handler(event):
-    await event.answer() # Stops loading circle
+    await event.answer()
     await send_button_forward(event, "prediction")
 
 @client.on(events.CallbackQuery(pattern=b"menu_number_hack"))
@@ -589,7 +609,7 @@ async def handle_admin_chat_state(event):
             del admin_chat_state[admin_id]
         except UserIsBlockedError:
             blocked_users.add(target_id)
-            save_user(target_uid, tracked_users.get(target_uid, 0), blocked=True)
+            save_user(target_id, tracked_users.get(target_id, 0), blocked=True)
             await event.respond(f"❌ `[Error] Delivery Failed: User blocked the bot.`")
             del admin_chat_state[admin_id]
         except Exception as e:
@@ -795,7 +815,6 @@ async def toggle_welcome(event):
 @client.on(events.NewMessage(pattern=r"^(/backup|📁 Backup)$"))
 @admin_only
 async def backup(event):
-    # Added admins to backup
     db_admins = [a for a in ADMIN_IDS if a not in ROOT_ADMINS]
     data = {
         "tracked": tracked_users,
@@ -803,6 +822,7 @@ async def backup(event):
         "messages": {str(k): v for k, v in saved_messages.items()},
         "button_forwards": button_forwards,
         "welcome": welcome_enabled,
+        "inline_text": inline_menu_text,
         "auto_replies": auto_replies,
         "db_admins": db_admins
     }
@@ -820,13 +840,14 @@ async def restore(event):
     path = await client.download_media(rep.media)
     try:
         with open(path, "r") as f: data = json.load(f)
-        global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, auto_replies, ADMIN_IDS
+        global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, inline_menu_text, auto_replies, ADMIN_IDS
         
         tracked_users = {int(k): int(v) for k, v in data.get("tracked", {}).items()}
         blocked_users = set(int(u) for u in data.get("blocked", []))
         saved_messages = {int(k): v for k, v in data.get("messages", {}).items()}
         button_forwards = data.get("button_forwards", {})
         welcome_enabled = data.get("welcome", True)
+        inline_menu_text = data.get("inline_text", "👇 Please select an option below:")
         auto_replies = data.get("auto_replies", {})
         db_admins = data.get("db_admins", [])
 
@@ -852,6 +873,7 @@ async def restore(event):
                     ADMIN_IDS.append(admin_id)
                 
         set_setting("welcome_enabled", "1" if welcome_enabled else "0")
+        set_setting("inline_text", inline_menu_text)
         await event.reply(f"✅ **Restore Successful:** Loaded `{len(tracked_users)}` users and `{len(db_admins)}` extra admins.")
     except Exception as e:
         await event.reply(f"❌ Restore failed: {e}")
@@ -886,13 +908,14 @@ async def backup_restore_buttons(event):
         if os.path.exists("auto_backup.json"):
             try:
                 with open("auto_backup.json", "r") as f: data = json.load(f)
-                global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, auto_replies, ADMIN_IDS
+                global tracked_users, blocked_users, saved_messages, button_forwards, welcome_enabled, inline_menu_text, auto_replies, ADMIN_IDS
                 
                 tracked_users = {int(k): int(v) for k, v in data.get("tracked", {}).items()}
                 blocked_users = set(int(u) for u in data.get("blocked", []))
                 saved_messages = {int(k): v for k, v in data.get("messages", {}).items()}
                 button_forwards = data.get("button_forwards", {})
                 welcome_enabled = data.get("welcome", True)
+                inline_menu_text = data.get("inline_text", "👇 Please select an option below:")
                 auto_replies = data.get("auto_replies", {})
                 db_admins = data.get("db_admins", [])
                 
@@ -916,6 +939,7 @@ async def backup_restore_buttons(event):
                             ADMIN_IDS.append(admin_id)
                         
                 set_setting("welcome_enabled", "1" if welcome_enabled else "0")
+                set_setting("inline_text", inline_menu_text)
                 await event.reply(f"✅ Restored from auto-backup successfully. Active users: `{len(tracked_users)}`")
             except Exception as e:
                 await event.reply(f"❌ Auto-restore failed: {e}")
@@ -939,14 +963,11 @@ async def seamless_chat_handler(event):
 
     text = event.raw_text.lower() if event.raw_text else ""
     
-    # Ignore admin commands
     if text.startswith('/') or "✉️ send message" in text or "📢 broadcast" in text or "📊 stats" in text or "⚙️ status" in text or "🔢 set sequence" in text or "🔇 toggle welcome" in text or "📁 backup" in text or "🔄 restore" in text or "🔘 set button" in text or "🗑 clear button" in text or "🧹 cleanup" in text or "👑 manage admins" in text:
         return
 
     if event.sender_id not in ADMIN_IDS:
-        # --- USER TO ADMIN ---
         if user_chat_state.get(event.sender_id):
-            
             bot_auto_replied = False
             for kw, resp in auto_replies.items():
                 if kw in text:
@@ -995,12 +1016,11 @@ async def seamless_chat_handler(event):
         else:
             try: await event.delete()
             except Exception: pass
-            warning_msg = await event.respond("⚠️ **Direct messages are disabled.**\n👉 Please use the **'ADMIN SUPPORT'** button in the menu to chat with an admin.")
+            warning_msg = await event.respond("⚠️ **Direct messages are disabled.**\n👉 Please use the **'🔴 ADMIN SUPPORT'** button in the menu to chat with an admin.")
             await asyncio.sleep(5)
             try: await warning_msg.delete()
             except Exception: pass
     else:
-        # --- ADMIN TO USER ---
         if event.is_reply:
             replied_msg = await event.get_reply_message()
             replied_text = replied_msg.raw_text or ""
@@ -1031,7 +1051,7 @@ async def seamless_chat_handler(event):
 # ------------------ AUTO BACKUP (EVERY 6 HOURS & SEND TO ADMINS) ------------------
 async def periodic_backup():
     while True:
-        await asyncio.sleep(6 * 3600)  # Har 6 ghante mein run hoga
+        await asyncio.sleep(6 * 3600)
         try:
             db_admins = [a for a in ADMIN_IDS if a not in ROOT_ADMINS]
             data = {
@@ -1040,6 +1060,7 @@ async def periodic_backup():
                 "messages": {str(k): v for k, v in saved_messages.items()},
                 "button_forwards": button_forwards,
                 "welcome": welcome_enabled,
+                "inline_text": inline_menu_text,
                 "auto_replies": auto_replies,
                 "db_admins": db_admins
             }
@@ -1048,7 +1069,7 @@ async def periodic_backup():
                 json.dump(data, f)
             
             caption = f"📁 `[Automatic 6-Hour Database Backup]`\n📊 Active Users: `{len(tracked_users)}` | Admins: `{len(ADMIN_IDS)}`"
-            for admin_id in ROOT_ADMINS: # Sirf root admins ko backup bhejna zyada safe hai
+            for admin_id in ROOT_ADMINS:
                 try:
                     await client.send_file(admin_id, file, caption=caption)
                 except Exception as e:
@@ -1065,11 +1086,10 @@ async def main():
     load_from_db()
     await start_web()
     asyncio.create_task(periodic_backup())
-    logger.info("Bot is running smoothly with Inline Menus...")
+    logger.info("Bot is running smoothly with Dynamic Inline Menus...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
     try: client.loop.run_until_complete(main())
     except KeyboardInterrupt: logger.info("Bot stopped.")
     except Exception as e: logger.error(f"Fatal error: {e}")
-
