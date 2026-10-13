@@ -410,7 +410,7 @@ async def start(event):
             if event.sender_id in ADMIN_IDS:
                 return
             user_chat_state[event.sender_id] = True
-            await event.respond("📝 **Premium Support Activated** 🟢\n➖➖➖➖➖➖➖➖➖➖➖➖\n\nAdmin Contact ID - @SAHILOFFICIAL_0")
+            await event.respond("📝 **Premium Support Activated** 🟢\n➖➖➖➖➖➖➖➖➖➖➖➖\n\nAdmin Contact ID - @HarshBhauOfficial")
             return
 
     # NORMAL START LOGIC
