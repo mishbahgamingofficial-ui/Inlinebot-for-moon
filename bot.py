@@ -40,7 +40,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", 10000))
 SESSION_STRING = os.environ.get("SESSION_STRING", "")
 
-# Safely parse Admin IDs
 def parse_admin_ids(env_string):
     ids = []
     for uid in env_string.split(","):
@@ -49,9 +48,8 @@ def parse_admin_ids(env_string):
             ids.append(int(uid))
     return ids
 
-# ENV se root admins load honge
 ROOT_ADMINS = parse_admin_ids(os.environ.get("ADMIN_IDS", "0"))
-ADMIN_IDS = list(ROOT_ADMINS) # Global list jisme DB wale admins bhi add honge
+ADMIN_IDS = list(ROOT_ADMINS)
 
 # ------------------ DATABASE & STATE ------------------
 DB_PATH = Path("bot_data.db")
@@ -61,7 +59,6 @@ blocked_users: set[int] = set()
 saved_messages: dict[int, dict] = {}    
 button_forwards: dict[str, list] = {}   
 
-# Menu State Variables
 welcome_enabled = True
 inline_menu_text = "👇 Please select an option below:" 
 recently_welcomed: set[int] = set()
@@ -111,27 +108,23 @@ def load_from_db():
     with sqlite3.connect(str(DB_PATH)) as conn:
         cur = conn.cursor()
         
-        # Load extra admins
         cur.execute("SELECT user_id FROM admins")
         for (uid,) in cur.fetchall():
             if uid not in ADMIN_IDS:
                 ADMIN_IDS.append(uid)
 
-        # Load users
         cur.execute("SELECT user_id, access_hash, blocked FROM users")
         for uid, hsh, blk in cur.fetchall():
             tracked_users[uid] = hsh
             if blk:
                 blocked_users.add(uid)
                 
-        # Load messages sequence
         cur.execute("SELECT step, msg_type, text, msg_id, from_chat FROM messages")
         for step, mtype, text, mid, fchat in cur.fetchall():
             saved_messages[step] = {
                 "type": mtype, "text": text, "msg_id": mid, "from_chat": fchat
             }
             
-        # Load button messages
         cur.execute("SELECT btn_key, msg_id, from_chat FROM button_msgs")
         button_forwards.clear()
         for key, mid, fchat in cur.fetchall():
@@ -139,7 +132,6 @@ def load_from_db():
                 button_forwards[key] = []
             button_forwards[key].append({"msg_id": mid, "from_chat": fchat})
             
-        # Load settings
         cur.execute("SELECT key, value FROM settings")
         for k, v in cur.fetchall():
             if k == 'welcome_enabled':
@@ -147,7 +139,6 @@ def load_from_db():
             elif k == 'inline_text':
                 inline_menu_text = v
             
-        # Load auto replies
         cur.execute("SELECT keyword, response FROM auto_replies")
         for kw, resp in cur.fetchall():
             auto_replies[kw] = resp
@@ -190,7 +181,6 @@ client = TelegramClient(
     API_HASH,
 )
 
-# ------------------ WEB SERVER ------------------
 async def web_handler(request):
     return web.Response(text="🟢 Bot is alive")
 
@@ -203,7 +193,6 @@ async def start_web():
     await site.start()
     logger.info(f"Web server on port {PORT}")
 
-# ------------------ DECORATORS ------------------
 def admin_only(func):
     async def wrapper(event):
         if event.sender_id not in ADMIN_IDS:
@@ -217,16 +206,18 @@ def admin_only(func):
 @admin_only
 async def set_inline_text(event):
     global inline_menu_text
-    new_text = event.pattern_match.group(1)
+    
+    # event.raw_text use kar rahe hain taaki bold/italic aur emojis bache rahein
+    new_text = event.raw_text.replace('/setinline', '', 1).strip()
     
     if event.is_reply and not new_text:
         reply_msg = await event.get_reply_message()
-        new_text = reply_msg.text
+        new_text = reply_msg.raw_text # Yahan bhi raw_text takki reply wala format bhi copy ho
         
     if not new_text:
         return await event.reply("❌ **Error:** Ya toh text type karo `/setinline <text>` ya kisi message par reply karke `/setinline` likho.")
         
-    inline_menu_text = new_text.strip()
+    inline_menu_text = new_text
     set_setting("inline_text", inline_menu_text)
     await event.reply(f"✅ **Inline Menu Text Updated Successfully!**\n\nNaya text ab ye dikhega:\n{inline_menu_text}")
 
@@ -286,7 +277,6 @@ async def notify_admins_new_user(user):
     first_name = user.first_name or ""
     last_name = user.last_name or ""
     full_name = f"{first_name} {last_name}".strip()
-    
     safe_name = full_name.replace('[', '').replace(']', '').replace('*', '').replace('_', '').replace('`', '')
     if not safe_name.strip():
         safe_name = "Unknown User"
@@ -310,16 +300,17 @@ async def notify_admins_new_user(user):
         except Exception:
             pass
 
-# ------------------ WELCOME SYSTEM & MENU ------------------
+# ------------------ WELCOME SYSTEM & INLINE MENU ------------------
 async def remove_welcome_cooldown(uid):
     await asyncio.sleep(30)
     recently_welcomed.discard(uid)
 
 async def send_user_menu(entity):
+    # Old Emojis Back
     btns = [
-        [Button.inline("🟢 START COLOUR TRADING", data=b"menu_colour_trading")],
-        [Button.inline("💎 GET NUMBER HACK", data=b"menu_number_hack")],
-        [Button.inline("🔴 ADMIN SUPPORT", data=b"menu_admin_support")]
+        [Button.inline("📊 START COLOUR TRADING", data=b"menu_colour_trading")],
+        [Button.inline("⚡️ GET NUMBER HACK", data=b"menu_number_hack")],
+        [Button.inline("🎧 ADMIN SUPPORT", data=b"menu_admin_support")]
     ]
     try:
         await client.send_message(entity, inline_menu_text, buttons=btns)
@@ -609,7 +600,7 @@ async def handle_admin_chat_state(event):
             del admin_chat_state[admin_id]
         except UserIsBlockedError:
             blocked_users.add(target_id)
-            save_user(target_id, tracked_users.get(target_id, 0), blocked=True)
+            save_user(target_uid, tracked_users.get(target_uid, 0), blocked=True)
             await event.respond(f"❌ `[Error] Delivery Failed: User blocked the bot.`")
             del admin_chat_state[admin_id]
         except Exception as e:
@@ -1016,7 +1007,7 @@ async def seamless_chat_handler(event):
         else:
             try: await event.delete()
             except Exception: pass
-            warning_msg = await event.respond("⚠️ **Direct messages are disabled.**\n👉 Please use the **'🔴 ADMIN SUPPORT'** button in the menu to chat with an admin.")
+            warning_msg = await event.respond("⚠️ **Direct messages are disabled.**\n👉 Please use the **'🎧 ADMIN SUPPORT'** button in the menu to chat with an admin.")
             await asyncio.sleep(5)
             try: await warning_msg.delete()
             except Exception: pass
