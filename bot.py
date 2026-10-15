@@ -83,7 +83,7 @@ ADMIN_KB_LABELS = {
     "📁 backup", "🔄 restore", "🧹 cleanup", "panel", "menu", "admin"
 }
 
- CANCEL_BTN = [[Button.inline("❌ Cancel Operation", data=b"adm_cancel")]]
+CANCEL_BTN = [[Button.inline("❌ Cancel Operation", data=b"adm_cancel")]]
 
 def get_uptime():
     seconds = int(time.time() - START_TIME)
